@@ -10,6 +10,54 @@ from matplotlib import pyplot as plt
 from qubit_ring import QubitRing
 
 
+def optimal_angle_evolutionary(qubit_ring: QubitRing, p_val: int, num_inits: int = 20
+                               )-> Tuple[float, List[Tuple[float, float]]]:
+    """Solves for the optimal approximation ratio at a given circuit depth (p) using evolutionary algorithm.
+
+        Args:
+            qubit_ring: Stores information of the Ising Hamiltonian. See
+                implementation of the QubitRing class.
+            p_val: Circuit depth (number of (\gamma, \beta) pairs).
+            num_inits: How many restarts with random initial guesses.
+
+        Returns:
+            best_ratio: The best approximation ratio at circuit depth p.
+            best_angles: The optimal angles that give the best approximation ratio.
+        """
+    energy_extrema, indices, e_list = qubit_ring.get_all_energies()
+
+    def cost_function(angles_list: Sequence[float]) -> float:
+        angles_list = [(angles_list[k], angles_list[k + 1]) for k in
+                       numpy.array(range(p_val)) * 2]
+        _, state_probs = qubit_ring.compute_wavefunction(angles_list)
+        return -float(numpy.sum(e_list * state_probs))
+
+    lower_bounds = numpy.array([0.0] * (2 * p_val))
+    upper_bounds = numpy.array([1.0, 2.0] * p_val) * 16
+
+    best_cost = None
+    best_angles = None
+
+    for i in range(num_inits):
+        guess = numpy.random.uniform(0, 4, p_val * 2)
+        guess[0::2] = guess[0::2] / 2.0
+        res = pybobyqa.solve(cost_function, guess,
+                             bounds=(lower_bounds, upper_bounds),
+                             maxfun=1000)
+        cost = res.f
+        if best_cost is None or cost < best_cost:
+            best_cost = cost
+            best_angles = res.x
+
+    best_angles = [(best_angles[i], best_angles[i + 1]) for i in
+                   numpy.array(range(p_val)) * 2]
+
+    e_max, e_min = energy_extrema['E_max'], energy_extrema['E_min']
+    best_ratio = (-best_cost - e_min) / (e_max - e_min)
+
+    return best_ratio, best_angles
+
+
 def optimal_angle_solver(qubit_ring: QubitRing, p_val: int, num_inits: int = 20
                          ) -> Tuple[float, List[Tuple[float, float]]]:
     """Solves for the optimal approximation ratio at a given circuit depth (p).
